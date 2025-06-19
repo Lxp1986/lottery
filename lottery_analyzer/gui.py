@@ -9,6 +9,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 import sys
 import os
+import requests # Added for API calls
 from datetime import datetime, timedelta
 
 from lottery_analyzer import data_input
@@ -331,10 +332,176 @@ class LotteryAnalyzerGUI(QMainWindow):
         }
         return method_map.get(method_name)
 
+    def handle_fetch_from_api(self):
+        # Placeholder for now, will be implemented in the next step
+        api_url = self.api_url_input.text()
+        if not api_url:
+            QMessageBox.warning(self, "提示", "请输入API URL")
+            return
+        self.statusBar.showMessage(f"准备从API获取数据: {api_url}")
+        # Actual fetching logic will be added later
+        api_url = self.api_url_input.text().strip()
+        if not api_url:
+            QMessageBox.warning(self, "提示", "请输入API URL")
+            return
+
+        self.statusBar.showMessage(f"正在从API获取数据: {api_url}...")
+        QApplication.processEvents() # Update UI to show status message
+
+        try:
+            # Fetch data from API
+            response = requests.get(api_url, timeout=10) # Added timeout
+            response.raise_for_status()  # Raise an exception for HTTP errors (4xx or 5xx)
+
+            raw_api_data = response.json()
+
+            # Validate API response structure
+            if raw_api_data.get("code") != 0:
+                message = raw_api_data.get("message", "API返回错误状态")
+                QMessageBox.warning(self, "API错误", f"API请求失败: {message}")
+                self.statusBar.showMessage("API请求失败")
+                return
+
+            api_draw_data = raw_api_data.get("data")
+            if not isinstance(api_draw_data, list):
+                QMessageBox.warning(self, "API数据格式错误", "API返回的数据格式不正确 (data字段不是列表).")
+                self.statusBar.showMessage("API数据格式错误")
+                return
+
+            if not api_draw_data:
+                QMessageBox.information(self, "提示", "API未返回任何开奖数据。")
+                self.statusBar.showMessage("API未返回数据")
+                return
+
+            # Load existing history
+            try:
+                history = data_input.load_history()
+            except Exception as e:
+                QMessageBox.critical(self, "错误", f"加载本地历史数据失败: {str(e)}")
+                self.statusBar.showMessage("加载本地历史数据失败")
+                return
+
+            existing_draw_ids = {draw['date'] for draw in history}
+            new_draws_added_count = 0
+
+            # Process API data
+            new_records_to_add = []
+            for api_draw in api_draw_data:
+                draw_id = api_draw.get("issue")
+                open_code_str = api_draw.get("openCode")
+                # open_time = api_draw.get("openTime") # Not directly used in save_history
+
+                if not draw_id or not open_code_str:
+                    print(f"警告: API数据条目缺少期号或开奖号码: {api_draw}")
+                    continue
+
+                if not (draw_id.isdigit() and len(draw_id) == 7):
+                    print(f"警告: 跳过无效API期号格式: {draw_id} (应为7位数字)")
+                    continue
+
+                if draw_id in existing_draw_ids:
+                    # This message can be noisy if API often returns old data,
+                    # so consider removing it or making it less prominent if that's the case.
+                    # print(f"信息: 期号 {draw_id} 已存在于历史记录中，跳过。")
+                    continue
+
+                try:
+                    # Parse openCode: "n1,n2,n3,n4,n5,n6,special"
+                    numbers_str_list = open_code_str.split(',')
+                    if len(numbers_str_list) != 7:
+                        print(f"警告: 开奖号码格式不正确 (数量应为7个，逗号分隔): {open_code_str} for issue {draw_id}")
+                        continue
+
+                    # Convert to integers
+                    numbers_int_list = [int(n.strip()) for n in numbers_str_list]
+
+                    numbers = numbers_int_list[:-1]
+                    special_num = numbers_int_list[-1]
+
+                    # Validate numbers
+                    if not all(1 <= n <= 49 for n in numbers):
+                         print(f"警告: 正码中有号码超出1-49范围 for issue {draw_id}: {numbers}")
+                         continue
+                    if not (1 <= special_num <= 49):
+                         print(f"警告: 特码超出1-49范围 for issue {draw_id}: {special_num}")
+                         continue
+                    if len(set(numbers)) != 6:
+                        print(f"警告: 正码中有重复号码 for issue {draw_id}: {numbers}")
+                        continue
+                    if special_num in numbers:
+                        print(f"警告: 特码与正码中某个号码重复 for issue {draw_id}: special {special_num}, regular {numbers}")
+                        continue
+
+                    transformed_draw = {
+                        'date': draw_id,
+                        'numbers': numbers, # List of 6 integers
+                        'special': special_num # Single integer
+                    }
+                    new_records_to_add.append(transformed_draw)
+                    existing_draw_ids.add(draw_id) # Add to set to prevent duplicates from API itself if API has internal dupes
+                    new_draws_added_count += 1
+
+                except ValueError as ve: # Catches errors from int() conversion if numbers are not valid integers
+                    print(f"警告: 解析号码时数值转换出错 for issue {draw_id}: {open_code_str}. Error: {ve}")
+                    continue
+
+            if not new_records_to_add:
+                QMessageBox.information(self, "提示", "没有新的开奖数据需要添加 (可能所有数据都已存在或API数据格式不符合要求)。")
+                self.statusBar.showMessage("没有新的开奖数据")
+                return
+
+            # Append new records to history and save
+            # The history object is modified in place by extend
+            history.extend(new_records_to_add)
+            try:
+                # save_history should take the entire dataset and overwrite the file
+                data_input.save_history(history)
+            except Exception as e:
+                QMessageBox.critical(self, "错误", f"保存合并后的历史数据失败: {str(e)}")
+                self.statusBar.showMessage("保存历史数据失败")
+                return
+
+            self.update_history_table() # Refresh the UI table
+            QMessageBox.information(self, "成功", f"成功从API获取并添加了 {new_draws_added_count} 条新记录。")
+            self.statusBar.showMessage(f"成功添加 {new_draws_added_count} 条新记录")
+
+        except requests.exceptions.Timeout:
+            QMessageBox.warning(self, "网络错误", "请求API超时。请检查网络连接或API地址。")
+            self.statusBar.showMessage("API请求超时")
+        except requests.exceptions.RequestException as e:
+            QMessageBox.warning(self, "网络错误", f"请求API时发生网络错误: {str(e)}")
+            self.statusBar.showMessage("API请求网络错误")
+        except ValueError as e: # Handles JSON decoding errors or other value errors during processing
+            QMessageBox.warning(self, "数据错误", f"处理API数据时出错 (例如JSON解码失败或数值转换问题): {str(e)}")
+            self.statusBar.showMessage("API数据处理错误")
+        except Exception as e: # Catch any other unexpected errors
+            QMessageBox.critical(self, "未知错误", f"发生未知错误: {str(e)}")
+            self.statusBar.showMessage(f"发生未知错误: {e}")
+        finally:
+            QApplication.processEvents() # Ensure UI updates after all operations
+
     def init_input_tab(self):
         """输入页面"""
         input_tab = QWidget()
         layout = QVBoxLayout()
+
+        # API 输入区域
+        api_group = QGroupBox("从API获取数据")
+        api_layout = QVBoxLayout()
+
+        api_url_layout = QHBoxLayout()
+        api_url_layout.addWidget(QLabel("API URL:"))
+        self.api_url_input = QLineEdit()
+        self.api_url_input.setPlaceholderText("输入API URL")
+        api_url_layout.addWidget(self.api_url_input)
+        api_layout.addLayout(api_url_layout)
+
+        self.fetch_api_button = QPushButton("获取数据")
+        self.fetch_api_button.clicked.connect(self.handle_fetch_from_api)
+        api_layout.addWidget(self.fetch_api_button)
+
+        api_group.setLayout(api_layout)
+        layout.addWidget(api_group)
         
         # 期号输入区域
         draw_id_layout = QHBoxLayout()
