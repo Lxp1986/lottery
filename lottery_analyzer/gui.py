@@ -333,13 +333,6 @@ class LotteryAnalyzerGUI(QMainWindow):
         return method_map.get(method_name)
 
     def handle_fetch_from_api(self):
-        # Placeholder for now, will be implemented in the next step
-        api_url = self.api_url_input.text()
-        if not api_url:
-            QMessageBox.warning(self, "提示", "请输入API URL")
-            return
-        self.statusBar.showMessage(f"准备从API获取数据: {api_url}")
-        # Actual fetching logic will be added later
         api_url = self.api_url_input.text().strip()
         if not api_url:
             QMessageBox.warning(self, "提示", "请输入API URL")
@@ -558,7 +551,7 @@ class LotteryAnalyzerGUI(QMainWindow):
         layout.addWidget(history_group)
         
         input_tab.setLayout(layout)
-        self.tabs.addTab(input_tab, "数据输入")
+        self.tabs.addTab(input_tab, "历史数据")
 
         # 设置表格右键菜单
         self.history_table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
@@ -568,506 +561,234 @@ class LotteryAnalyzerGUI(QMainWindow):
         self.history_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.history_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
 
-    def init_analysis_tab(self):
-        """分析页面"""
-        analysis_tab = QWidget()
-        layout = QVBoxLayout()
-        
-        # 分析控制面板
-        control_group = QGroupBox("分析控制")
-        control_layout = QHBoxLayout()
-        
-        self.analysis_type = QComboBox()
-        self.analysis_type.addItems(["全部", "正码", "特码"])
-        control_layout.addWidget(QLabel("分析类型:"))
-        control_layout.addWidget(self.analysis_type)
-        
-        self.top_n = QSpinBox()
-        self.top_n.setValue(5)
-        self.top_n.setRange(1, 20)
-        control_layout.addWidget(QLabel("显示前N个:"))
-        control_layout.addWidget(self.top_n)
-        
-        self.periods_spin = QSpinBox()
-        self.periods_spin.setRange(1, 1000)
-        self.periods_spin.setValue(100)
-        control_layout.addWidget(QLabel("分析期数:"))
-        control_layout.addWidget(self.periods_spin)
-        
-        analyze_btn = QPushButton("开始分析")
-        analyze_btn.clicked.connect(self.handle_analysis)
-        control_layout.addWidget(analyze_btn)
-        
-        control_group.setLayout(control_layout)
-        layout.addWidget(control_group)
-        
-        # 分析结果表格
-        results_group = QGroupBox("分析结果")
-        results_layout = QVBoxLayout()
-        self.result_table = QTableWidget()
-        self.result_table.setColumnCount(4)
-        self.result_table.setHorizontalHeaderLabels(["号码", "出现次数", "出现频率", "最近出现"])
-        header = self.result_table.horizontalHeader()
-        header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        results_layout.addWidget(self.result_table)
-        
-        # 可视化按钮
-        viz_btn = QPushButton("生成图表")
-        viz_btn.clicked.connect(self.handle_visualization)
-        results_layout.addWidget(viz_btn)
-        
-        results_group.setLayout(results_layout)
-        layout.addWidget(results_group)
-        
-        analysis_tab.setLayout(layout)
-        self.tabs.addTab(analysis_tab, "数据分析")
-    
-    def init_prediction_tab(self):
-        """预测页面"""
-        prediction_tab = QWidget()
-        layout = QVBoxLayout()
-        
-        # 预测控制组
-        control_group = QGroupBox("预测控制")
-        control_layout = QGridLayout()
-        
-        # 预测方法选择
-        self.pred_method = QComboBox()
-        self.pred_method.addItems([
-            "综合预测",
-            "基础预测",
-            "标签预测",
-            "马尔可夫预测",
-            "贝叶斯预测",
-            "时间序列预测",
-            "灰度预测"
-        ])
-        control_layout.addWidget(QLabel("预测方法:"), 0, 0)
-        control_layout.addWidget(self.pred_method, 0, 1)
-        
-        # 预测组数
-        self.num_predictions = QSpinBox()
-        self.num_predictions.setRange(1, 10)
-        self.num_predictions.setValue(5)
-        control_layout.addWidget(QLabel("预测组数:"), 0, 2)
-        control_layout.addWidget(self.num_predictions, 0, 3)
-        
-        # 参数设置
-        self.recent_draws = QSpinBox()
-        self.recent_draws.setRange(5, 1000)  # 修改最大值为1000
-        self.recent_draws.setValue(10)
-        control_layout.addWidget(QLabel("参考期数:"), 1, 0)
-        control_layout.addWidget(self.recent_draws, 1, 1)
-        
-        self.tag_trend_draws = QSpinBox()
-        self.tag_trend_draws.setRange(10, 1000)  # 修改最大值为1000
-        self.tag_trend_draws.setValue(20)
-        control_layout.addWidget(QLabel("标签趋势期数:"), 1, 2)
-        control_layout.addWidget(self.tag_trend_draws, 1, 3)
-        
-        # 预测按钮
-        predict_btn = QPushButton("开始预测")
-        predict_btn.clicked.connect(self.handle_prediction)
-        control_layout.addWidget(predict_btn, 2, 0, 1, 4)
-        
-        control_group.setLayout(control_layout)
-        layout.addWidget(control_group)
-        
-        # 预测结果显示区域
-        results_group = QGroupBox("预测结果")
-        results_layout = QVBoxLayout()
-        
-        self.results_table = QTableWidget()
-        self.results_table.setColumnCount(3)
-        self.results_table.setHorizontalHeaderLabels(["预测方法", "预测正码", "预测特码"])
-        header = self.results_table.horizontalHeader()
-        header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        results_layout.addWidget(self.results_table)
-        
-        self.confidence_label = QLabel("置信度分析:")
-        results_layout.addWidget(self.confidence_label)
-        
-        results_group.setLayout(results_layout)
-        layout.addWidget(results_group)
-        
-        prediction_tab.setLayout(layout)
-        self.tabs.addTab(prediction_tab, "号码预测")
-
-    def handle_prediction(self):
-        """处理预测请求"""
-        try:
-            # 清空表格
-            self.results_table.setRowCount(0)
-            num_groups = self.num_predictions.value()
-            
-            history = data_input.load_history()
-            if not history:
-                QMessageBox.warning(self, "警告", "没有历史数据，预测将基于随机或有限数据")
-            
-            # 获取实际可用的历史数据长度
-            max_history = len(history)
-            recent_draws = min(self.recent_draws.value(), max_history)
-            tag_trend_draws = min(self.tag_trend_draws.value(), max_history)
-            
-            # 如果请求的期数超过实际数据，显示提示
-            if self.recent_draws.value() > max_history or self.tag_trend_draws.value() > max_history:
-                QMessageBox.information(self, "提示", 
-                    f"历史数据仅有 {max_history} 期，将使用全部可用数据进行预测。")
-            
-            method = self.pred_method.currentText()
-            
-            for group in range(num_groups):
-                if method == "综合预测":
-                    result = prediction.predict_all_methods(
-                        history,
-                        num_to_predict=6,
-                        recent_draws_count=recent_draws,
-                        tag_trend_draws=tag_trend_draws
-                    )
-                    self._add_prediction_results(f"第{group+1}组综合预测", result)
-                    # 显示各方法的预测结果
-                    for method_name, method_result in result['method_results'].items():
-                        self._add_prediction_results(f"  {method_name}", method_result)
-                else:
-                    # 单一方法预测
-                    prediction_method = self._get_prediction_method(method)
-                    if method in ["基础预测", "标签预测"]:
-                        # 这些方法需要频率数据
-                        reg_freq, spec_freq = analysis.calculate_frequencies(history)
-                        result = prediction_method(
-                            history,
-                            reg_freq,
-                            spec_freq,
-                            number_tags=tagging.number_tags if method == "标签预测" else None,
-                            num_to_predict=6,
-                            recent_draws_count=recent_draws,
-                            tag_trend_draws=tag_trend_draws
-                        )
-                    else:
-                        # 高级预测方法不需要频率数据
-                        result = prediction_method(
-                            history,
-                            num_to_predict=6
-                        )
-                    self._add_prediction_results(f"第{group+1}组", result)
-            
-            self.statusBar.showMessage("预测完成")
-            
-        except Exception as e:
-            QMessageBox.warning(self, "错误", str(e))
-            self.statusBar.showMessage("预测失败")
-
-    def _add_prediction_results(self, method_name: str, result: dict):
-        """向结果表格添加一行预测结果"""
-        row = self.results_table.rowCount()
-        self.results_table.insertRow(row)
-        
-        reg_nums = [self.format_number(n) for n in result['regular']]
-        spec_num = self.format_number(result['special'])
-        
-        self.results_table.setItem(row, 0, QTableWidgetItem(method_name))
-        self.results_table.setItem(row, 1, QTableWidgetItem(', '.join(reg_nums)))
-        self.results_table.setItem(row, 2, QTableWidgetItem(spec_num))
-
-    def _get_prediction_method(self, method_name: str):
-        """获取对应的预测方法"""
-        method_map = {
-            "基础预测": prediction.predict_numbers_basic,
-            "标签预测": prediction.predict_numbers_with_tags,
-            "马尔可夫预测": lambda *args, **kwargs: prediction.predict_numbers_advanced(history_data=args[0], method="markov", **kwargs),
-            "贝叶斯预测": lambda *args, **kwargs: prediction.predict_numbers_advanced(history_data=args[0], method="bayes", **kwargs),
-            "时间序列预测": lambda *args, **kwargs: prediction.predict_numbers_advanced(history_data=args[0], method="timeseries", **kwargs),
-            "灰度预测": prediction.predict_using_grey_model
-        }
-        return method_map.get(method_name)
-
-    def init_input_tab(self):
-        """输入页面"""
-        input_tab = QWidget()
-        layout = QVBoxLayout()
-        
-        # 期号输入区域
-        draw_id_layout = QHBoxLayout()
-        draw_id_layout.addWidget(QLabel("期号:"))
-        self.draw_id_input = QLineEdit()
-        self.draw_id_input.setPlaceholderText("格式: YYYYNNN 例如: 2025001")
-        
-        # 自动设置初始期号
-        self._set_initial_draw_id()
-        draw_id_layout.addWidget(self.draw_id_input)
-        layout.addLayout(draw_id_layout)
-        
-        # 号码输入区域
-        numbers_group = QGroupBox("号码输入")
-        numbers_layout = QVBoxLayout()
-        
-        regular_layout = QHBoxLayout()
-        regular_layout.addWidget(QLabel("六个正码(用点号分隔):"))
-        self.numbers_input = QLineEdit()
-        self.numbers_input.setPlaceholderText("例如: 01.02.03.04.05.06")
-        
-        # 添加回车键支持
-        self.numbers_input.returnPressed.connect(self.handle_submit)
-        regular_layout.addWidget(self.numbers_input)
-        numbers_layout.addLayout(regular_layout)
-        
-        special_layout = QHBoxLayout()
-        special_layout.addWidget(QLabel("特别号码:"))
-        self.special_input = QLineEdit()
-        self.special_input.setPlaceholderText("例如: 07")
-        # 添加回车键支持
-        self.special_input.returnPressed.connect(self.handle_submit)
-        special_layout.addWidget(self.special_input)
-        numbers_layout.addLayout(special_layout)
-        
-        numbers_group.setLayout(numbers_layout)
-        layout.addWidget(numbers_group)
-        
-        # 添加按钮
-        submit_btn = QPushButton("添加开奖记录")
-        submit_btn.clicked.connect(self.handle_submit)
-        layout.addWidget(submit_btn)
-        
-        # 历史记录表格
-        history_group = QGroupBox("历史记录")
-        history_layout = QVBoxLayout()
-        self.history_table = QTableWidget()
-        self.history_table.setColumnCount(8)
-        self.history_table.setHorizontalHeaderLabels(["期号", "号码1", "号码2", "号码3", "号码4", "号码5", "号码6", "特别号"])
-        header = self.history_table.horizontalHeader()
-        header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        history_layout.addWidget(self.history_table)
-        history_group.setLayout(history_layout)
-        layout.addWidget(history_group)
-        
-        input_tab.setLayout(layout)
-        self.tabs.addTab(input_tab, "数据输入")
-
-        # 设置表格右键菜单
-        self.history_table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.history_table.customContextMenuRequested.connect(self.show_context_menu)
-        
-        # 使表格可选择
-        self.history_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        self.history_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
-
-    def init_analysis_tab(self):
-        """分析页面"""
-        analysis_tab = QWidget()
-        layout = QVBoxLayout()
-        
-        # 分析控制面板
-        control_group = QGroupBox("分析控制")
-        control_layout = QHBoxLayout()
-        
-        self.analysis_type = QComboBox()
-        self.analysis_type.addItems(["全部", "正码", "特码"])
-        control_layout.addWidget(QLabel("分析类型:"))
-        control_layout.addWidget(self.analysis_type)
-        
-        self.top_n = QSpinBox()
-        self.top_n.setValue(5)
-        self.top_n.setRange(1, 20)
-        control_layout.addWidget(QLabel("显示前N个:"))
-        control_layout.addWidget(self.top_n)
-        
-        self.periods_spin = QSpinBox()
-        self.periods_spin.setRange(1, 1000)
-        self.periods_spin.setValue(100)
-        control_layout.addWidget(QLabel("分析期数:"))
-        control_layout.addWidget(self.periods_spin)
-        
-        analyze_btn = QPushButton("开始分析")
-        analyze_btn.clicked.connect(self.handle_analysis)
-        control_layout.addWidget(analyze_btn)
-        
-        control_group.setLayout(control_layout)
-        layout.addWidget(control_group)
-        
-        # 分析结果表格
-        results_group = QGroupBox("分析结果")
-        results_layout = QVBoxLayout()
-        self.result_table = QTableWidget()
-        self.result_table.setColumnCount(4)
-        self.result_table.setHorizontalHeaderLabels(["号码", "出现次数", "出现频率", "最近出现"])
-        header = self.result_table.horizontalHeader()
-        header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        results_layout.addWidget(self.result_table)
-        
-        # 可视化按钮
-        viz_btn = QPushButton("生成图表")
-        viz_btn.clicked.connect(self.handle_visualization)
-        results_layout.addWidget(viz_btn)
-        
-        results_group.setLayout(results_layout)
-        layout.addWidget(results_group)
-        
-        analysis_tab.setLayout(layout)
-        self.tabs.addTab(analysis_tab, "数据分析")
-    
-    def init_prediction_tab(self):
-        """预测页面"""
-        prediction_tab = QWidget()
-        layout = QVBoxLayout()
-        
-        # 预测控制组
-        control_group = QGroupBox("预测控制")
-        control_layout = QGridLayout()
-        
-        # 预测方法选择
-        self.pred_method = QComboBox()
-        self.pred_method.addItems([
-            "综合预测",
-            "基础预测",
-            "标签预测",
-            "马尔可夫预测",
-            "贝叶斯预测",
-            "时间序列预测",
-            "灰度预测"
-        ])
-        control_layout.addWidget(QLabel("预测方法:"), 0, 0)
-        control_layout.addWidget(self.pred_method, 0, 1)
-        
-        # 预测组数
-        self.num_predictions = QSpinBox()
-        self.num_predictions.setRange(1, 10)
-        self.num_predictions.setValue(5)
-        control_layout.addWidget(QLabel("预测组数:"), 0, 2)
-        control_layout.addWidget(self.num_predictions, 0, 3)
-        
-        # 参数设置
-        self.recent_draws = QSpinBox()
-        self.recent_draws.setRange(5, 1000)  # 修改最大值为1000
-        self.recent_draws.setValue(10)
-        control_layout.addWidget(QLabel("参考期数:"), 1, 0)
-        control_layout.addWidget(self.recent_draws, 1, 1)
-        
-        self.tag_trend_draws = QSpinBox()
-        self.tag_trend_draws.setRange(10, 1000)  # 修改最大值为1000
-        self.tag_trend_draws.setValue(20)
-        control_layout.addWidget(QLabel("标签趋势期数:"), 1, 2)
-        control_layout.addWidget(self.tag_trend_draws, 1, 3)
-        
-        # 预测按钮
-        predict_btn = QPushButton("开始预测")
-        predict_btn.clicked.connect(self.handle_prediction)
-        control_layout.addWidget(predict_btn, 2, 0, 1, 4)
-        
-        control_group.setLayout(control_layout)
-        layout.addWidget(control_group)
-        
-        # 预测结果显示区域
-        results_group = QGroupBox("预测结果")
-        results_layout = QVBoxLayout()
-        
-        self.results_table = QTableWidget()
-        self.results_table.setColumnCount(3)
-        self.results_table.setHorizontalHeaderLabels(["预测方法", "预测正码", "预测特码"])
-        header = self.results_table.horizontalHeader()
-        header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        results_layout.addWidget(self.results_table)
-        
-        self.confidence_label = QLabel("置信度分析:")
-        results_layout.addWidget(self.confidence_label)
-        
-        results_group.setLayout(results_layout)
-        layout.addWidget(results_group)
-        
-        prediction_tab.setLayout(layout)
-        self.tabs.addTab(prediction_tab, "号码预测")
-
-    def handle_prediction(self):
-        """处理预测请求"""
-        try:
-            # 清空表格
-            self.results_table.setRowCount(0)
-            num_groups = self.num_predictions.value()
-            
-            history = data_input.load_history()
-            if not history:
-                QMessageBox.warning(self, "警告", "没有历史数据，预测将基于随机或有限数据")
-            
-            # 获取实际可用的历史数据长度
-            max_history = len(history)
-            recent_draws = min(self.recent_draws.value(), max_history)
-            tag_trend_draws = min(self.tag_trend_draws.value(), max_history)
-            
-            # 如果请求的期数超过实际数据，显示提示
-            if self.recent_draws.value() > max_history or self.tag_trend_draws.value() > max_history:
-                QMessageBox.information(self, "提示", 
-                    f"历史数据仅有 {max_history} 期，将使用全部可用数据进行预测。")
-            
-            method = self.pred_method.currentText()
-            
-            for group in range(num_groups):
-                if method == "综合预测":
-                    result = prediction.predict_all_methods(
-                        history,
-                        num_to_predict=6,
-                        recent_draws_count=recent_draws,
-                        tag_trend_draws=tag_trend_draws
-                    )
-                    self._add_prediction_results(f"第{group+1}组综合预测", result)
-                    # 显示各方法的预测结果
-                    for method_name, method_result in result['method_results'].items():
-                        self._add_prediction_results(f"  {method_name}", method_result)
-                else:
-                    # 单一方法预测
-                    prediction_method = self._get_prediction_method(method)
-                    if method in ["基础预测", "标签预测"]:
-                        # 这些方法需要频率数据
-                        reg_freq, spec_freq = analysis.calculate_frequencies(history)
-                        result = prediction_method(
-                            history,
-                            reg_freq,
-                            spec_freq,
-                            number_tags=tagging.number_tags if method == "标签预测" else None,
-                            num_to_predict=6,
-                            recent_draws_count=recent_draws,
-                            tag_trend_draws=tag_trend_draws
-                        )
-                    else:
-                        # 高级预测方法不需要频率数据
-                        result = prediction_method(
-                            history,
-                            num_to_predict=6
-                        )
-                    self._add_prediction_results(f"第{group+1}组", result)
-            
-            self.statusBar.showMessage("预测完成")
-            
-        except Exception as e:
-            QMessageBox.warning(self, "错误", str(e))
-            self.statusBar.showMessage("预测失败")
-
-    def _add_prediction_results(self, method_name: str, result: dict):
-        """向结果表格添加一行预测结果"""
-        row = self.results_table.rowCount()
-        self.results_table.insertRow(row)
-        
-        reg_nums = [self.format_number(n) for n in result['regular']]
-        spec_num = self.format_number(result['special'])
-        
-        self.results_table.setItem(row, 0, QTableWidgetItem(method_name))
-        self.results_table.setItem(row, 1, QTableWidgetItem(', '.join(reg_nums)))
-        self.results_table.setItem(row, 2, QTableWidgetItem(spec_num))
-
-    def _get_prediction_method(self, method_name: str):
-        """获取对应的预测方法"""
-        method_map = {
-            "基础预测": prediction.predict_numbers_basic,
-            "标签预测": prediction.predict_numbers_with_tags,
-            "马尔可夫预测": lambda *args, **kwargs: prediction.predict_numbers_advanced(history_data=args[0], method="markov", **kwargs),
-            "贝叶斯预测": lambda *args, **kwargs: prediction.predict_numbers_advanced(history_data=args[0], method="bayes", **kwargs),
-            "时间序列预测": lambda *args, **kwargs: prediction.predict_numbers_advanced(history_data=args[0], method="timeseries", **kwargs),
-            "灰度预测": prediction.predict_using_grey_model
-        }
-        return method_map.get(method_name)
+    # The following methods are duplicated and will be removed.
+    # init_analysis_tab
+    # init_prediction_tab
+    # handle_prediction
+    # _add_prediction_results
+    # _get_prediction_method
+    # init_input_tab (second occurrence)
+    # init_analysis_tab (second occurrence)
+    # init_prediction_tab (second occurrence)
+    # handle_prediction (second occurrence)
+    # _add_prediction_results (second occurrence)
+    # _get_prediction_method (second occurrence)
 
     def init_tags_tab(self):
         """标签管理页面"""
         try:
             tags_tab = QWidget()
+        layout = QVBoxLayout()
+        
+        # 分析控制面板
+        control_group = QGroupBox("分析控制")
+        control_layout = QHBoxLayout()
+        
+        self.analysis_type = QComboBox()
+        self.analysis_type.addItems(["全部", "正码", "特码"])
+        control_layout.addWidget(QLabel("分析类型:"))
+        control_layout.addWidget(self.analysis_type)
+        
+        self.top_n = QSpinBox()
+        self.top_n.setValue(5)
+        self.top_n.setRange(1, 20)
+        control_layout.addWidget(QLabel("显示前N个:"))
+        control_layout.addWidget(self.top_n)
+        
+        self.periods_spin = QSpinBox()
+        self.periods_spin.setRange(1, 1000)
+        self.periods_spin.setValue(100)
+        control_layout.addWidget(QLabel("分析期数:"))
+        control_layout.addWidget(self.periods_spin)
+        
+        analyze_btn = QPushButton("开始分析")
+        analyze_btn.clicked.connect(self.handle_analysis)
+        control_layout.addWidget(analyze_btn)
+        
+        control_group.setLayout(control_layout)
+        layout.addWidget(control_group)
+        
+        # 分析结果表格
+        results_group = QGroupBox("分析结果")
+        results_layout = QVBoxLayout()
+        self.result_table = QTableWidget()
+        self.result_table.setColumnCount(4)
+        self.result_table.setHorizontalHeaderLabels(["号码", "出现次数", "出现频率", "最近出现"])
+        header = self.result_table.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        results_layout.addWidget(self.result_table)
+        
+        # 可视化按钮
+        viz_btn = QPushButton("生成图表")
+        viz_btn.clicked.connect(self.handle_visualization)
+        results_layout.addWidget(viz_btn)
+        
+        results_group.setLayout(results_layout)
+        layout.addWidget(results_group)
+        
+        analysis_tab.setLayout(layout)
+        self.tabs.addTab(analysis_tab, "数据分析")
+    
+    def init_prediction_tab(self):
+        """预测页面"""
+        prediction_tab = QWidget()
+        layout = QVBoxLayout()
+        
+        # 预测控制组
+        control_group = QGroupBox("预测控制")
+        control_layout = QGridLayout()
+        
+        # 预测方法选择
+        self.pred_method = QComboBox()
+        self.pred_method.addItems([
+            "综合预测",
+            "基础预测",
+            "标签预测",
+            "马尔可夫预测",
+            "贝叶斯预测",
+            "时间序列预测",
+            "灰度预测"
+        ])
+        control_layout.addWidget(QLabel("预测方法:"), 0, 0)
+        control_layout.addWidget(self.pred_method, 0, 1)
+        
+        # 预测组数
+        self.num_predictions = QSpinBox()
+        self.num_predictions.setRange(1, 10)
+        self.num_predictions.setValue(5)
+        control_layout.addWidget(QLabel("预测组数:"), 0, 2)
+        control_layout.addWidget(self.num_predictions, 0, 3)
+        
+        # 参数设置
+        self.recent_draws = QSpinBox()
+        self.recent_draws.setRange(5, 1000)  # 修改最大值为1000
+        self.recent_draws.setValue(10)
+        control_layout.addWidget(QLabel("参考期数:"), 1, 0)
+        control_layout.addWidget(self.recent_draws, 1, 1)
+        
+        self.tag_trend_draws = QSpinBox()
+        self.tag_trend_draws.setRange(10, 1000)  # 修改最大值为1000
+        self.tag_trend_draws.setValue(20)
+        control_layout.addWidget(QLabel("标签趋势期数:"), 1, 2)
+        control_layout.addWidget(self.tag_trend_draws, 1, 3)
+        
+        # 预测按钮
+        predict_btn = QPushButton("开始预测")
+        predict_btn.clicked.connect(self.handle_prediction)
+        control_layout.addWidget(predict_btn, 2, 0, 1, 4)
+        
+        control_group.setLayout(control_layout)
+        layout.addWidget(control_group)
+        
+        # 预测结果显示区域
+        results_group = QGroupBox("预测结果")
+        results_layout = QVBoxLayout()
+        
+        self.results_table = QTableWidget()
+        self.results_table.setColumnCount(3)
+        self.results_table.setHorizontalHeaderLabels(["预测方法", "预测正码", "预测特码"])
+        header = self.results_table.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        results_layout.addWidget(self.results_table)
+        
+        self.confidence_label = QLabel("置信度分析:")
+        results_layout.addWidget(self.confidence_label)
+        
+        results_group.setLayout(results_layout)
+        layout.addWidget(results_group)
+        
+        prediction_tab.setLayout(layout)
+        self.tabs.addTab(prediction_tab, "号码预测")
+
+    def handle_prediction(self):
+        """处理预测请求"""
+        try:
+            # 清空表格
+            self.results_table.setRowCount(0)
+            num_groups = self.num_predictions.value()
+            
+            history = data_input.load_history()
+            if not history:
+                QMessageBox.warning(self, "警告", "没有历史数据，预测将基于随机或有限数据")
+            
+            # 获取实际可用的历史数据长度
+            max_history = len(history)
+            recent_draws = min(self.recent_draws.value(), max_history)
+            tag_trend_draws = min(self.tag_trend_draws.value(), max_history)
+            
+            # 如果请求的期数超过实际数据，显示提示
+            if self.recent_draws.value() > max_history or self.tag_trend_draws.value() > max_history:
+                QMessageBox.information(self, "提示", 
+                    f"历史数据仅有 {max_history} 期，将使用全部可用数据进行预测。")
+            
+            method = self.pred_method.currentText()
+            
+            for group in range(num_groups):
+                if method == "综合预测":
+                    result = prediction.predict_all_methods(
+                        history,
+                        num_to_predict=6,
+                        recent_draws_count=recent_draws,
+                        tag_trend_draws=tag_trend_draws
+                    )
+                    self._add_prediction_results(f"第{group+1}组综合预测", result)
+                    # 显示各方法的预测结果
+                    for method_name, method_result in result['method_results'].items():
+                        self._add_prediction_results(f"  {method_name}", method_result)
+                else:
+                    # 单一方法预测
+                    prediction_method = self._get_prediction_method(method)
+                    if method in ["基础预测", "标签预测"]:
+                        # 这些方法需要频率数据
+                        reg_freq, spec_freq = analysis.calculate_frequencies(history)
+                        result = prediction_method(
+                            history,
+                            reg_freq,
+                            spec_freq,
+                            number_tags=tagging.number_tags if method == "标签预测" else None,
+                            num_to_predict=6,
+                            recent_draws_count=recent_draws,
+                            tag_trend_draws=tag_trend_draws
+                        )
+                    else:
+                        # 高级预测方法不需要频率数据
+                        result = prediction_method(
+                            history,
+                            num_to_predict=6
+                        )
+                    self._add_prediction_results(f"第{group+1}组", result)
+            
+            self.statusBar.showMessage("预测完成")
+            
+        except Exception as e:
+            QMessageBox.warning(self, "错误", str(e))
+            self.statusBar.showMessage("预测失败")
+
+    def _add_prediction_results(self, method_name: str, result: dict):
+        """向结果表格添加一行预测结果"""
+        row = self.results_table.rowCount()
+        self.results_table.insertRow(row)
+        
+        reg_nums = [self.format_number(n) for n in result['regular']]
+        spec_num = self.format_number(result['special'])
+        
+        self.results_table.setItem(row, 0, QTableWidgetItem(method_name))
+        self.results_table.setItem(row, 1, QTableWidgetItem(', '.join(reg_nums)))
+        self.results_table.setItem(row, 2, QTableWidgetItem(spec_num))
+
+    def _get_prediction_method(self, method_name: str):
+        """获取对应的预测方法"""
+        method_map = {
+            "基础预测": prediction.predict_numbers_basic,
+            "标签预测": prediction.predict_numbers_with_tags,
+            "马尔可夫预测": lambda *args, **kwargs: prediction.predict_numbers_advanced(history_data=args[0], method="markov", **kwargs),
+            "贝叶斯预测": lambda *args, **kwargs: prediction.predict_numbers_advanced(history_data=args[0], method="bayes", **kwargs),
+            "时间序列预测": lambda *args, **kwargs: prediction.predict_numbers_advanced(history_data=args[0], method="timeseries", **kwargs),
+            "灰度预测": prediction.predict_using_grey_model
+        }
+        return method_map.get(method_name)
+
+    # This is the end of the duplicated block
             layout = QVBoxLayout()
             
             # 号码网格
