@@ -1,0 +1,7 @@
+[core]
+    autocrlf = input
+    safecrlf = true
+[http]
+    sslVerify = false
+[init]
+    defaultBranch = main
