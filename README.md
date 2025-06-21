@@ -50,7 +50,8 @@
 - **special_number**：特别号，1-49且不与正码重复
 
 示例：
-```
+
+```csv
 date,n1,n2,n3,n4,n5,n6,special_number
 2025001,5,12,23,34,40,45,7
 ```
@@ -61,15 +62,20 @@ date,n1,n2,n3,n4,n5,n6,special_number
 
 1. **环境要求**：Python 3.7+，PyQt6，pandas，numpy，matplotlib，seaborn
 2. **安装依赖**：
+
    ```bash
    pip install -r requirements.txt
    ```
+
 3. **启动GUI**：
+
    ```bash
    python -m lottery_analyzer.main --gui
    ```
    - 启动后会自动从API同步最新数据
+
 4. **命令行用法**：
+
    ```bash
    python -m lottery_analyzer.main <命令> [参数]
    ```
