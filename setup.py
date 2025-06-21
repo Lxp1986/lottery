@@ -14,6 +14,8 @@ setup(
         'pandas>=1.3.0',
         'numpy>=1.20.0',
         'scipy>=1.7.0',  # 用于灰色模型的数学计算
+        'requests>=2.31.0',  # 添加requests库
+        'typing-extensions>=4.0.0',  # 添加类型提示支持
     ],
     entry_points={
         'console_scripts': [

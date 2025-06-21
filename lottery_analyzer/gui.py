@@ -31,6 +31,9 @@ class LotteryAnalyzerGUI(QMainWindow):
         self.setCentralWidget(self.central_widget)
         self.main_layout = QVBoxLayout(self.central_widget)
         
+        # 添加默认API URL
+        self.default_api_url = "https://api.macaumarksix.com/history/macaujc2/y/2025"
+        
         self.create_menu_bar()
         
         self.tabs = QTabWidget()
@@ -41,7 +44,11 @@ class LotteryAnalyzerGUI(QMainWindow):
             self.init_analysis_tab()
             self.init_prediction_tab()
             self.init_tags_tab()
-            self.init_label_prediction_tab() # New tab initialization
+            self.init_label_prediction_tab()
+            
+            # 自动从API刷新数据
+            self.auto_refresh_from_api()
+            
             self.load_system_data()
         except Exception as e:
             QMessageBox.critical(self, "初始化错误", f"系统初始化失败: {str(e)}")
@@ -156,7 +163,7 @@ class LotteryAnalyzerGUI(QMainWindow):
                 self.update_history_table()
                 self.statusBar.showMessage(f"已导入: {file_path}")
             except Exception as e:
-                QMessageBox.warning(self, "错误", f"导入失败: {str(e)}")
+                QMessageBox
 
     def handle_save_history_as(self):
         """历史数据另存为"""
@@ -343,121 +350,105 @@ class LotteryAnalyzerGUI(QMainWindow):
 
         try:
             # Fetch data from API
-            response = requests.get(api_url, timeout=10) # Added timeout
-            response.raise_for_status()  # Raise an exception for HTTP errors (4xx or 5xx)
-
+            response = requests.get(api_url, timeout=10)
+            response.raise_for_status()
             raw_api_data = response.json()
 
-            # Validate API response structure
-            if raw_api_data.get("code") != 0:
-                message = raw_api_data.get("message", "API返回错误状态")
-                QMessageBox.warning(self, "API错误", f"API请求失败: {message}")
+            # 修改响应码判断逻辑
+            if raw_api_data.get("code") == 200:  # API返回200表示成功
+                api_draw_data = raw_api_data.get("data", [])
+                if not isinstance(api_draw_data, list):
+                    QMessageBox.warning(self, "API数据格式错误", "API返回的数据格式不正确 (data字段不是列表)")
+                    self.statusBar.showMessage("API数据格式错误")
+                    return
+                    
+                if not api_draw_data:
+                    QMessageBox.information(self, "提示", "API未返回任何开奖数据，可能所选年份还没有开奖数据")
+                    self.statusBar.showMessage("API未返回数据")
+                    return
+                    
+                # Load existing history
+                try:
+                    history = data_input.load_history()
+                except Exception as e:
+                    QMessageBox.critical(self, "错误", f"加载本地历史数据失败: {str(e)}")
+                    self.statusBar.showMessage("加载本地历史数据失败")
+                    return
+
+                existing_draw_ids = {draw['date'] for draw in history}
+                new_draws_added_count = 0
+
+                # Process API data 
+                new_records_to_add = []
+                for api_draw in api_draw_data:
+                    draw_id = api_draw.get("expect")  # Get the period number
+                    open_code_str = api_draw.get("openCode")
+                    
+                    # Check if period number and open code exist
+                    if not draw_id or not open_code_str:
+                        continue
+                    
+                    try:
+                        # Parse openCode string
+                        numbers_str_list = open_code_str.split(',')
+                        if len(numbers_str_list) != 7:
+                            continue
+
+                        # Convert to integers
+                        numbers_int_list = [int(n.strip()) for n in numbers_str_list]
+                        
+                        numbers = numbers_int_list[:-1]  # First 6 numbers
+                        special_num = numbers_int_list[-1]  # Last number
+                        
+                        # Validate numbers
+                        if not all(1 <= n <= 49 for n in numbers):
+                            continue
+                        if not (1 <= special_num <= 49):
+                            continue
+                        if len(set(numbers)) != 6:
+                            continue
+                        if special_num in numbers:
+                            continue
+                            
+                        transformed_draw = {
+                            'date': draw_id,  # Use expect value directly as date
+                            'numbers': numbers,
+                            'special': special_num
+                        }
+                        new_records_to_add.append(transformed_draw)
+                        existing_draw_ids.add(draw_id)
+                        new_draws_added_count += 1
+
+                    except ValueError:
+                        continue
+                        
+                if not new_records_to_add:
+                    QMessageBox.information(self, "提示", "没有新的开奖数据需要添加 (可能所有数据都已存在或API数据格式不符合要求)。")
+                    self.statusBar.showMessage("没有新的开奖数据")
+                    return
+
+                # Append new records to history and save
+                # The history object is modified in place by extend
+                history.extend(new_records_to_add)
+                try:
+                    # save_history should take the entire dataset and overwrite the file
+                    data_input.save_history(history)
+                except Exception as e:
+                    QMessageBox.critical(self, "错误", f"保存合并后的历史数据失败: {str(e)}")
+                    self.statusBar.showMessage("保存历史数据失败")
+                    return
+
+                self.update_history_table() # Refresh the UI table
+                QMessageBox.information(self, "成功", f"成功从API获取并添加了 {new_draws_added_count} 条新记录。")
+                self.statusBar.showMessage(f"成功添加 {new_draws_added_count} 条新记录")
+
+            else:
+                # API调用失败
+                message = raw_api_data.get("message", "未知错误")
+                QMessageBox.warning(self, "API请求失败", f"错误信息: {message}")
                 self.statusBar.showMessage("API请求失败")
                 return
-
-            api_draw_data = raw_api_data.get("data")
-            if not isinstance(api_draw_data, list):
-                QMessageBox.warning(self, "API数据格式错误", "API返回的数据格式不正确 (data字段不是列表).")
-                self.statusBar.showMessage("API数据格式错误")
-                return
-
-            if not api_draw_data:
-                QMessageBox.information(self, "提示", "API未返回任何开奖数据。")
-                self.statusBar.showMessage("API未返回数据")
-                return
-
-            # Load existing history
-            try:
-                history = data_input.load_history()
-            except Exception as e:
-                QMessageBox.critical(self, "错误", f"加载本地历史数据失败: {str(e)}")
-                self.statusBar.showMessage("加载本地历史数据失败")
-                return
-
-            existing_draw_ids = {draw['date'] for draw in history}
-            new_draws_added_count = 0
-
-            # Process API data
-            new_records_to_add = []
-            for api_draw in api_draw_data:
-                draw_id = api_draw.get("issue")
-                open_code_str = api_draw.get("openCode")
-                # open_time = api_draw.get("openTime") # Not directly used in save_history
-
-                if not draw_id or not open_code_str:
-                    print(f"警告: API数据条目缺少期号或开奖号码: {api_draw}")
-                    continue
-
-                if not (draw_id.isdigit() and len(draw_id) == 7):
-                    print(f"警告: 跳过无效API期号格式: {draw_id} (应为7位数字)")
-                    continue
-
-                if draw_id in existing_draw_ids:
-                    # This message can be noisy if API often returns old data,
-                    # so consider removing it or making it less prominent if that's the case.
-                    # print(f"信息: 期号 {draw_id} 已存在于历史记录中，跳过。")
-                    continue
-
-                try:
-                    # Parse openCode: "n1,n2,n3,n4,n5,n6,special"
-                    numbers_str_list = open_code_str.split(',')
-                    if len(numbers_str_list) != 7:
-                        print(f"警告: 开奖号码格式不正确 (数量应为7个，逗号分隔): {open_code_str} for issue {draw_id}")
-                        continue
-
-                    # Convert to integers
-                    numbers_int_list = [int(n.strip()) for n in numbers_str_list]
-
-                    numbers = numbers_int_list[:-1]
-                    special_num = numbers_int_list[-1]
-
-                    # Validate numbers
-                    if not all(1 <= n <= 49 for n in numbers):
-                         print(f"警告: 正码中有号码超出1-49范围 for issue {draw_id}: {numbers}")
-                         continue
-                    if not (1 <= special_num <= 49):
-                         print(f"警告: 特码超出1-49范围 for issue {draw_id}: {special_num}")
-                         continue
-                    if len(set(numbers)) != 6:
-                        print(f"警告: 正码中有重复号码 for issue {draw_id}: {numbers}")
-                        continue
-                    if special_num in numbers:
-                        print(f"警告: 特码与正码中某个号码重复 for issue {draw_id}: special {special_num}, regular {numbers}")
-                        continue
-
-                    transformed_draw = {
-                        'date': draw_id,
-                        'numbers': numbers, # List of 6 integers
-                        'special': special_num # Single integer
-                    }
-                    new_records_to_add.append(transformed_draw)
-                    existing_draw_ids.add(draw_id) # Add to set to prevent duplicates from API itself if API has internal dupes
-                    new_draws_added_count += 1
-
-                except ValueError as ve: # Catches errors from int() conversion if numbers are not valid integers
-                    print(f"警告: 解析号码时数值转换出错 for issue {draw_id}: {open_code_str}. Error: {ve}")
-                    continue
-
-            if not new_records_to_add:
-                QMessageBox.information(self, "提示", "没有新的开奖数据需要添加 (可能所有数据都已存在或API数据格式不符合要求)。")
-                self.statusBar.showMessage("没有新的开奖数据")
-                return
-
-            # Append new records to history and save
-            # The history object is modified in place by extend
-            history.extend(new_records_to_add)
-            try:
-                # save_history should take the entire dataset and overwrite the file
-                data_input.save_history(history)
-            except Exception as e:
-                QMessageBox.critical(self, "错误", f"保存合并后的历史数据失败: {str(e)}")
-                self.statusBar.showMessage("保存历史数据失败")
-                return
-
-            self.update_history_table() # Refresh the UI table
-            QMessageBox.information(self, "成功", f"成功从API获取并添加了 {new_draws_added_count} 条新记录。")
-            self.statusBar.showMessage(f"成功添加 {new_draws_added_count} 条新记录")
-
+            
         except requests.exceptions.Timeout:
             QMessageBox.warning(self, "网络错误", "请求API超时。请检查网络连接或API地址。")
             self.statusBar.showMessage("API请求超时")
@@ -561,23 +552,9 @@ class LotteryAnalyzerGUI(QMainWindow):
         self.history_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.history_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
 
-    # The following methods are duplicated and will be removed.
-    # init_analysis_tab
-    # init_prediction_tab
-    # handle_prediction
-    # _add_prediction_results
-    # _get_prediction_method
-    # init_input_tab (second occurrence)
-    # init_analysis_tab (second occurrence)
-    # init_prediction_tab (second occurrence)
-    # handle_prediction (second occurrence)
-    # _add_prediction_results (second occurrence)
-    # _get_prediction_method (second occurrence)
-
-    def init_tags_tab(self):
-        """标签管理页面"""
-        try:
-            tags_tab = QWidget()
+    def init_analysis_tab(self):
+        """分析页面"""
+        analysis_tab = QWidget()
         layout = QVBoxLayout()
         
         # 分析控制面板
@@ -628,167 +605,70 @@ class LotteryAnalyzerGUI(QMainWindow):
         
         analysis_tab.setLayout(layout)
         self.tabs.addTab(analysis_tab, "数据分析")
-    
+
     def init_prediction_tab(self):
         """预测页面"""
         prediction_tab = QWidget()
         layout = QVBoxLayout()
         
-        # 预测控制组
+        # 预测控制面板
         control_group = QGroupBox("预测控制")
-        control_layout = QGridLayout()
+        control_layout = QHBoxLayout()
         
-        # 预测方法选择
         self.pred_method = QComboBox()
-        self.pred_method.addItems([
-            "综合预测",
-            "基础预测",
-            "标签预测",
-            "马尔可夫预测",
-            "贝叶斯预测",
-            "时间序列预测",
-            "灰度预测"
-        ])
-        control_layout.addWidget(QLabel("预测方法:"), 0, 0)
-        control_layout.addWidget(self.pred_method, 0, 1)
+        self.pred_method.addItems(["基础预测", "标签预测", "马尔可夫预测", "贝叶斯预测", "时间序列预测", "灰度预测", "综合预测"])
+        control_layout.addWidget(QLabel("预测方法:"))
+        control_layout.addWidget(self.pred_method)
         
-        # 预测组数
         self.num_predictions = QSpinBox()
+        self.num_predictions.setValue(1)
         self.num_predictions.setRange(1, 10)
-        self.num_predictions.setValue(5)
-        control_layout.addWidget(QLabel("预测组数:"), 0, 2)
-        control_layout.addWidget(self.num_predictions, 0, 3)
+        control_layout.addWidget(QLabel("预测组数:"))
+        control_layout.addWidget(self.num_predictions)
         
-        # 参数设置
         self.recent_draws = QSpinBox()
-        self.recent_draws.setRange(5, 1000)  # 修改最大值为1000
-        self.recent_draws.setValue(10)
-        control_layout.addWidget(QLabel("参考期数:"), 1, 0)
-        control_layout.addWidget(self.recent_draws, 1, 1)
+        self.recent_draws.setValue(100)
+        self.recent_draws.setRange(1, 1000)
+        control_layout.addWidget(QLabel("近期数据期数:"))
+        control_layout.addWidget(self.recent_draws)
         
         self.tag_trend_draws = QSpinBox()
-        self.tag_trend_draws.setRange(10, 1000)  # 修改最大值为1000
         self.tag_trend_draws.setValue(20)
-        control_layout.addWidget(QLabel("标签趋势期数:"), 1, 2)
-        control_layout.addWidget(self.tag_trend_draws, 1, 3)
+        self.tag_trend_draws.setRange(1, 1000)  # 修改上限为1000
+        control_layout.addWidget(QLabel("标签趋势期数:"))
+        control_layout.addWidget(self.tag_trend_draws)
         
-        # 预测按钮
         predict_btn = QPushButton("开始预测")
         predict_btn.clicked.connect(self.handle_prediction)
-        control_layout.addWidget(predict_btn, 2, 0, 1, 4)
+        control_layout.addWidget(predict_btn)
         
         control_group.setLayout(control_layout)
         layout.addWidget(control_group)
         
-        # 预测结果显示区域
+        # 预测结果表格
         results_group = QGroupBox("预测结果")
         results_layout = QVBoxLayout()
-        
+
         self.results_table = QTableWidget()
         self.results_table.setColumnCount(3)
-        self.results_table.setHorizontalHeaderLabels(["预测方法", "预测正码", "预测特码"])
+        self.results_table.setHorizontalHeaderLabels(["方法", "预测号码", "特别号码"])
+
         header = self.results_table.horizontalHeader()
-        header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch) # Method column
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch) # Regular numbers
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch) # Special number
+
         results_layout.addWidget(self.results_table)
-        
-        self.confidence_label = QLabel("置信度分析:")
-        results_layout.addWidget(self.confidence_label)
-        
         results_group.setLayout(results_layout)
         layout.addWidget(results_group)
         
         prediction_tab.setLayout(layout)
-        self.tabs.addTab(prediction_tab, "号码预测")
+        self.tabs.addTab(prediction_tab, "数据预测")
 
-    def handle_prediction(self):
-        """处理预测请求"""
+    def init_tags_tab(self):
+        """标签管理页面"""
         try:
-            # 清空表格
-            self.results_table.setRowCount(0)
-            num_groups = self.num_predictions.value()
-            
-            history = data_input.load_history()
-            if not history:
-                QMessageBox.warning(self, "警告", "没有历史数据，预测将基于随机或有限数据")
-            
-            # 获取实际可用的历史数据长度
-            max_history = len(history)
-            recent_draws = min(self.recent_draws.value(), max_history)
-            tag_trend_draws = min(self.tag_trend_draws.value(), max_history)
-            
-            # 如果请求的期数超过实际数据，显示提示
-            if self.recent_draws.value() > max_history or self.tag_trend_draws.value() > max_history:
-                QMessageBox.information(self, "提示", 
-                    f"历史数据仅有 {max_history} 期，将使用全部可用数据进行预测。")
-            
-            method = self.pred_method.currentText()
-            
-            for group in range(num_groups):
-                if method == "综合预测":
-                    result = prediction.predict_all_methods(
-                        history,
-                        num_to_predict=6,
-                        recent_draws_count=recent_draws,
-                        tag_trend_draws=tag_trend_draws
-                    )
-                    self._add_prediction_results(f"第{group+1}组综合预测", result)
-                    # 显示各方法的预测结果
-                    for method_name, method_result in result['method_results'].items():
-                        self._add_prediction_results(f"  {method_name}", method_result)
-                else:
-                    # 单一方法预测
-                    prediction_method = self._get_prediction_method(method)
-                    if method in ["基础预测", "标签预测"]:
-                        # 这些方法需要频率数据
-                        reg_freq, spec_freq = analysis.calculate_frequencies(history)
-                        result = prediction_method(
-                            history,
-                            reg_freq,
-                            spec_freq,
-                            number_tags=tagging.number_tags if method == "标签预测" else None,
-                            num_to_predict=6,
-                            recent_draws_count=recent_draws,
-                            tag_trend_draws=tag_trend_draws
-                        )
-                    else:
-                        # 高级预测方法不需要频率数据
-                        result = prediction_method(
-                            history,
-                            num_to_predict=6
-                        )
-                    self._add_prediction_results(f"第{group+1}组", result)
-            
-            self.statusBar.showMessage("预测完成")
-            
-        except Exception as e:
-            QMessageBox.warning(self, "错误", str(e))
-            self.statusBar.showMessage("预测失败")
-
-    def _add_prediction_results(self, method_name: str, result: dict):
-        """向结果表格添加一行预测结果"""
-        row = self.results_table.rowCount()
-        self.results_table.insertRow(row)
-        
-        reg_nums = [self.format_number(n) for n in result['regular']]
-        spec_num = self.format_number(result['special'])
-        
-        self.results_table.setItem(row, 0, QTableWidgetItem(method_name))
-        self.results_table.setItem(row, 1, QTableWidgetItem(', '.join(reg_nums)))
-        self.results_table.setItem(row, 2, QTableWidgetItem(spec_num))
-
-    def _get_prediction_method(self, method_name: str):
-        """获取对应的预测方法"""
-        method_map = {
-            "基础预测": prediction.predict_numbers_basic,
-            "标签预测": prediction.predict_numbers_with_tags,
-            "马尔可夫预测": lambda *args, **kwargs: prediction.predict_numbers_advanced(history_data=args[0], method="markov", **kwargs),
-            "贝叶斯预测": lambda *args, **kwargs: prediction.predict_numbers_advanced(history_data=args[0], method="bayes", **kwargs),
-            "时间序列预测": lambda *args, **kwargs: prediction.predict_numbers_advanced(history_data=args[0], method="timeseries", **kwargs),
-            "灰度预测": prediction.predict_using_grey_model
-        }
-        return method_map.get(method_name)
-
-    # This is the end of the duplicated block
+            tags_tab = QWidget()
             layout = QVBoxLayout()
             
             # 号码网格
@@ -805,7 +685,7 @@ class LotteryAnalyzerGUI(QMainWindow):
                 col = (num - 1) % 7
                 numbers_layout.addWidget(btn, row, col)
                 self.number_buttons[num] = btn
-                
+            
             numbers_group.setLayout(numbers_layout)
             layout.addWidget(numbers_group)
 
@@ -839,55 +719,31 @@ class LotteryAnalyzerGUI(QMainWindow):
             
             tags_tab.setLayout(layout)
             self.tabs.addTab(tags_tab, "标签管理")
+            return tags_tab
+            
         except Exception as e:
             QMessageBox.critical(self, "错误", f"初始化标签页失败: {str(e)}")
+            raise
 
     def init_label_prediction_tab(self):
         """标签预测页面 Tab for Label Prediction."""
         label_prediction_tab = QWidget()
-        layout = QVBoxLayout(label_prediction_tab) # Set layout for the tab
-
-        # Placeholder content
-        placeholder_label = QLabel("标签预测功能将在这里实现。")
-        layout.addWidget(placeholder_label)
-
-        # Add more UI elements for label prediction here later
-        # For example:
-        # - A button to trigger label prediction
-        # - A display area (e.g., QTableWidget or QTextEdit) for results
-
-        # Remove placeholder
-        # if placeholder_label.layout() is not None: # Check if it's in a layout
-        #     layout.removeWidget(placeholder_label)
-        #     placeholder_label.deleteLater()
-        # Or, more simply, just don't add it if we are re-writing the method content.
-        # The previous step added the tab with the placeholder.
-        # This step will define the method with new content.
-        # So, we clear the existing layout first if we are truly "modifying" the content of an existing tab widget.
-        # However, init_label_prediction_tab is called once at startup.
-        # The task is to *modify the method's definition*, not to dynamically change UI after it's shown.
-
-        # Clear previous content by taking the widget and setting a new layout (or clearing children)
-        # This is simpler: the method will now define the final content directly.
-        while layout.count():
-            child = layout.takeAt(0)
-            if child.widget():
-                child.widget().deleteLater()
+        layout = QVBoxLayout(label_prediction_tab)
 
         # --- 预测控制区域 ---
         control_group = QGroupBox("预测控制")
-        control_layout = QGridLayout(control_group) # Changed to QGridLayout and set parent
+        control_layout = QGridLayout(control_group)
 
         # QLabel for the spinbox
         draws_label = QLabel("分析期数:")
-        control_layout.addWidget(draws_label, 0, 0) # Row 0, Col 0
+        control_layout.addWidget(draws_label, 0, 0)
 
-        # QSpinBox for draw count
+        # QSpinBox for draw count - 修改这里的范围
         self.label_pred_draws_spinbox = QSpinBox()
-        self.label_pred_draws_spinbox.setRange(10, 1000)
+        self.label_pred_draws_spinbox.setRange(10, 1000)  # 修改上限为1000
         self.label_pred_draws_spinbox.setValue(100)
         self.label_pred_draws_spinbox.setSuffix(" 期")
-        control_layout.addWidget(self.label_pred_draws_spinbox, 0, 1) # Row 0, Col 1
+        control_layout.addWidget(self.label_pred_draws_spinbox, 0, 1)
 
         # QPushButton for starting prediction
         self.predict_labels_button = QPushButton("开始标签预测")
@@ -1240,6 +1096,87 @@ class LotteryAnalyzerGUI(QMainWindow):
                 
         except Exception as e:
             QMessageBox.warning(self, "错误", f"删除记录失败: {str(e)}")
+
+    def auto_refresh_from_api(self):
+        """程序启动时自动从API刷新数据"""
+        try:
+            # 设置API URL到输入框
+            if hasattr(self, 'api_url_input'):
+                self.api_url_input.setText(self.default_api_url)
+                
+            # 静默调用API更新
+            response = requests.get(self.default_api_url, timeout=10)
+            response.raise_for_status()
+            raw_api_data = response.json()
+
+            if raw_api_data.get("code") == 200:
+                api_draw_data = raw_api_data.get("data", [])
+                if not isinstance(api_draw_data, list):
+                    return
+
+                # Load existing history
+                try:
+                    history = data_input.load_history()
+                except Exception:
+                    history = []
+
+                existing_draw_ids = {draw['date'] for draw in history}
+                new_records_to_add = []
+                new_draws_added_count = 0
+
+                # Process API data
+                for api_draw in api_draw_data:
+                    draw_id = api_draw.get("expect")
+                    open_code_str = api_draw.get("openCode")
+                    
+                    if not draw_id or not open_code_str:
+                        continue
+
+                    try:
+                        numbers_str_list = open_code_str.split(',')
+                        if len(numbers_str_list) != 7:
+                            continue
+
+                        numbers_int_list = [int(n.strip()) for n in numbers_str_list]
+                        numbers = numbers_int_list[:-1]
+                        special_num = numbers_int_list[-1]
+
+                        if not all(1 <= n <= 49 for n in numbers):
+                            continue
+                        if not (1 <= special_num <= 49):
+                            continue
+                        if len(set(numbers)) != 6:
+                            continue
+                        if special_num in numbers:
+                            continue
+
+                        if draw_id not in existing_draw_ids:
+                            transformed_draw = {
+                                'date': draw_id,
+                                'numbers': numbers,
+                                'special': special_num
+                            }
+                            new_records_to_add.append(transformed_draw)
+                            existing_draw_ids.add(draw_id)
+                            new_draws_added_count += 1
+
+                    except ValueError:
+                        continue
+
+                if new_records_to_add:
+                    history.extend(new_records_to_add)
+                    try:
+                        data_input.save_history(history)
+                        self.statusBar.showMessage(f"启动时自动更新：新增{new_draws_added_count}条记录")
+                    except Exception as e:
+                        print(f"自动更新保存失败: {str(e)}")
+                else:
+                    self.statusBar.showMessage("启动时自动更新：无新数据")
+
+        except requests.exceptions.RequestException as e:
+            print(f"自动更新出错: {str(e)}")
+        except Exception as e:
+            print(f"自动更新过程出错: {str(e)}")
 
 def launch_gui():
     """启动GUI应用"""

@@ -1,0 +1,38 @@
+name: Sync to GitHub
+
+on:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: '0 */2 * * *'  # 每2小时运行一次
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+      
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.7'
+          
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          
+      - name: Auto update lottery data
+        run: |
+          python -m lottery_analyzer.gui --auto-sync
+        
+      - name: Commit and push if changes
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add data/
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Auto update lottery data" && git push)

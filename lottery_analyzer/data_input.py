@@ -68,11 +68,17 @@ def load_history(filepath: str = None, merge: bool = False) -> List[Dict]:
     try:
         file_to_load = filepath if filepath else SYSTEM_FILE
         if not os.path.exists(file_to_load):
+            # 如果文件不存在，返回空列表
             return []
             
         history = []
         with open(file_to_load, mode='r', newline='', encoding='utf-8') as f:
             reader = csv.DictReader(f)
+            
+            # 检查文件是否为空
+            if not reader.fieldnames:
+                return []
+                
             if not all(field in reader.fieldnames for field in CSV_HEADER):
                 raise ValueError(f"文件格式错误: 需要的列名 {CSV_HEADER}")
                 
@@ -99,7 +105,8 @@ def load_history(filepath: str = None, merge: bool = False) -> List[Dict]:
         return history
         
     except Exception as e:
-        raise ValueError(f"读取文件失败: {str(e)}")
+        print(f"警告: 读取文件失败: {str(e)}")
+        return []  # 出错时返回空列表而不是抛出异常
 
 def export_history(filepath: str) -> bool:
     """导出历史数据到指定文件"""
