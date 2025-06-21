@@ -1,230 +1,97 @@
-# Lottery Analysis and Prediction Tool
+# 六合彩分析预测系统（Lottery Analysis and Prediction Tool）
 
-## Overview
+## 项目简介
 
-This Python application analyzes historical lottery data to provide insights into number frequencies and predict potential future winning numbers. It is designed for lotteries with a 6+1 format (6 regular numbers and 1 special number) drawn from a range of 1 to 49.
+本项目是基于 Python 的六合彩数据分析与预测工具，支持历史数据管理、频率分析、标签系统、号码预测、自动API同步、可视化等功能。支持 6+1 格式（6个正码+1个特别号），号码范围 1-49。
 
-## Features
-
-*   **Input Historical Data**: Add past lottery draws to a CSV file.
-*   **Frequency Analysis**: Identify the most and least common regular and special numbers.
-*   **Number Tagging**:
-    *   Automatic default tags: "Odd", "Even", "Small" (1-24), "Big" (25-49).
-    *   Add custom string tags to numbers.
-*   **Number Prediction**:
-    *   **Basic Method**: Predicts numbers based on overall frequency and recent "hot" number trends.
-    *   **Tag-Based Method**: Enhances basic prediction by considering trends of number tags in recent draws.
-
-## Project Structure
-
-The project is organized into several Python modules within the `lottery_analyzer` package:
-
-*   `data_input.py`: Handles loading and saving of lottery history data from/to CSV.
-*   `tagging.py`: Manages the tagging system for numbers.
-*   `analysis.py`: Contains functions for frequency calculations.
-*   `prediction.py`: Implements the number prediction algorithms.
-*   `main.py`: Provides the command-line interface (CLI) to interact with the application.
-*   `tests/`: Contains unit tests for various modules.
-
-## Setup and Installation
-
-1.  **Python Version**: Requires Python 3.7 or higher (due to dictionary insertion order being relied upon by `collections.Counter` in some tests and potentially in `prediction.py` logic, and f-string usage).
-2.  **Libraries**: This project requires several external Python libraries. You can install them using pip and the provided `requirements.txt` file.
-3.  **Clone the Repository (if applicable)**:
-    ```bash
-    git clone <repository_url>
-    cd <repository_directory>
-    ```
-4.  **Install Dependencies**:
-    ```bash
-    pip install -r requirements.txt
-    ```
-5.  **Data Directory**: The application will automatically create a `data/` directory in the project root if it doesn't exist, where `history.csv` will be stored.
-
-## Data File Format (`data/history.csv`)
-
-The historical lottery data is stored in `data/history.csv`.
-
-*   **Format**: CSV (Comma Separated Values)
-*   **Header Row**: `date,n1,n2,n3,n4,n5,n6,special_number`
-*   **Columns**:
-    *   `date`: The date of the draw in YYYY-MM-DD format.
-    *   `n1` to `n6`: The six regular numbers drawn. These should be integers between 1 and 49, and unique within the draw.
-    *   `special_number`: The special or bonus number. This should be an integer between 1 and 49 and distinct from the regular numbers in that draw.
-
-*   **Example Row**:
-    ```csv
-    date,n1,n2,n3,n4,n5,n6,special_number
-    2023-01-01,5,12,23,34,40,45,7
-    ```
-
-## Usage (CLI Examples)
-
-All commands are run from the root directory of the project. The main entry point is `main.py` within the `lottery_analyzer` package.
-
-**General Command Structure**:
-`python -m lottery_analyzer.main <command> [options]`
-
-You can get help for any command using `-h` or `--help`:
-`python -m lottery_analyzer.main -h`
-`python -m lottery_analyzer.main add_draw -h`
-
-### 1. Adding a New Draw
-
-```bash
-# Add a draw with a specific date
-python -m lottery_analyzer.main add_draw --numbers "1,2,3,4,5,6" --special "7" --date "2023-10-26"
-
-# Add a draw (uses current date if --date is omitted)
-python -m lottery_analyzer.main add_draw --numbers "10,15,20,25,30,35" --special "40"
-```
-*Input validation ensures numbers are within range (1-49), unique for regular numbers, and the special number is distinct from regular numbers.*
-
-### 2. Showing Analysis
-
-```bash
-# Show overall analysis (top 5 by default)
-python -m lottery_analyzer.main show_analysis
-
-# Show top 3 most/least frequent numbers
-python -m lottery_analyzer.main show_analysis --top 3
-
-# Show analysis only for regular numbers (top 5)
-python -m lottery_analyzer.main show_analysis --type regular --top 5
-
-# Show analysis only for special numbers
-python -m lottery_analyzer.main show_analysis --type special
-```
-
-### 查看分析结果并生成可视化
-
-```bash
-# 显示分析结果并生成可视化图表
-python -m lottery_analyzer.main show_analysis --plot
-
-# 查看特定类型的分析并生成图表
-python -m lottery_analyzer.main show_analysis --type regular --plot
-```
-
-生成的图表将保存在 `data/analysis_plots` 目录下:
-- `frequency_distribution.png`: 显示号码频率分布
-- `trend_analysis.png`: 显示近期开奖趋势
-
-### 3. Managing Tags
-
-Default tags ("Odd", "Even", "Small", "Big") are automatically applied. You can add custom tags.
-**Note**: Custom tags are currently stored in-memory and are **not persisted** between different runs of the application. They will reset each time the application starts.
-
-```bash
-# Add a custom tag "MyFavorite" to number 10
-python -m lottery_analyzer.main manage_tags --add_tag 10 "MyFavorite"
-
-# View all tags for number 10 (will include default tags and any custom tags added in the current session)
-python -m lottery_analyzer.main manage_tags --view_tags_for_number 10
-
-# View all numbers that have the "Small" tag
-python -m lottery_analyzer.main manage_tags --view_numbers_for_tag "Small"
-
-# View numbers with a custom tag (if added in the same session)
-python -m lottery_analyzer.main manage_tags --view_numbers_for_tag "MyFavorite"
-```
-
-### 4. Getting Predictions
-
-```bash
-# Get a prediction using the default 'tags' method
-python -m lottery_analyzer.main predict
-
-# Get a prediction using the 'basic' method
-python -m lottery_analyzer.main predict --method basic
-
-# Predict 5 regular numbers, using last 15 draws for recency analysis
-python -m lottery_analyzer.main predict --num_to_predict 5 --recent_draws 15
-
-# Use 'tags' method, considering last 25 draws for tag trend analysis
-python -m lottery_analyzer.main predict --method tags --tag_trend_draws 25
-```
-
-## GUI 界面使用
-
-启动图形界面:
-```bash
-python -m lottery_analyzer.main --gui
-```
-
-GUI功能包括:
-- 数据输入: 通过表单添加新的开奖记录
-- 数据分析: 查看频率分析并生成可视化图表
-- 号码预测: 使用基础或标签方法进行预测
-- 标签管理: 添加和查看号码标签
-
-## Running Tests
-
-Unit tests are provided for core modules. To run the tests, navigate to the project root directory and execute:
-
-```bash
-python -m unittest discover tests -v
-```
-
-## Future Enhancements (Optional)
-
-*   **Persistent Custom Tags**: Implement saving and loading of custom tags to a file.
-*   **Advanced Prediction Models**: Explore and integrate more sophisticated machine learning or statistical models for prediction.
-*   **Data Visualization**: Add options to visualize number frequencies or trends.
-*   **Graphical User Interface (GUI)**: Develop a GUI for easier interaction.
-*   **Configuration File**: Allow configuration of parameters (e.g., lottery number range, count of numbers) via a config file.
-
-# 六合彩分析预测系统
-
-## 概述
-
-这是一个基于 Python 开发的六合彩分析预测工具，支持分析历史开奖数据、预测号码、管理号码标签等功能。系统采用 6+1 的开奖格式（6个正码和1个特别号码），号码范围为1-49。
+---
 
 ## 主要功能
 
-### 1. 数据管理
-- 录入历史开奖记录
-- 导入/导出 CSV 格式的历史数据
-- 数据自动备份
+- **自动API同步**：每次启动自动从API获取最新开奖记录并更新本地数据。
+- **历史数据管理**：支持CSV导入导出，自动备份。
+- **频率分析**：统计正码/特别号出现频率，冷热分析。
+- **标签系统**：自动标签（奇偶/大小），支持自定义标签。
+- **数据预测**：
+  - 基础预测（频率+近期热门）
+  - 标签预测（结合标签趋势）
+  - 马尔可夫预测
+  - 贝叶斯预测
+  - 时间序列预测
+  - 灰度预测
+  - 综合预测（多模型融合）
+- **标签趋势期数**：最大支持1000期分析。
+- **可视化**：自动生成频率分布图、趋势图。
+- **图形界面（GUI）与命令行（CLI）**：均支持。
 
-### 2. 数据分析
-- 号码频率分析
-- 冷热号码分析
-- 自动生成频率分布图和趋势图
+---
 
-### 3. 号码预测
-- 基础预测：基于频率和近期热门号码
-- 标签预测：结合号码标签特征
-- 马尔可夫预测：使用马尔可夫链模型
-- 贝叶斯预测：基于贝叶斯概率
-- 时间序列预测：分析号码趋势
-- 灰度预测：使用灰色系统理论
-- 综合预测：融合多种预测方法的结果
+## 项目结构
 
-### 4. 标签系统
-- 自动标签：奇偶、大小(1-24为小，25-49为大)
-- 自定义标签：支持添加和管理自定义标签
+- `lottery_analyzer/`
+  - `data_input.py`：数据加载与保存
+  - `tagging.py`：标签系统
+  - `analysis.py`：频率与统计分析
+  - `prediction.py`：预测算法
+  - `advanced_prediction.py`：高级预测（马尔可夫、贝叶斯等）
+  - `visualization.py`：可视化
+  - `gui.py`：图形界面主程序
+  - `main.py`：命令行入口
+- `data/`：历史数据与分析结果
+- `requirements.txt`：依赖库
 
-## 环境要求
+---
 
-- Python 3.7+
-- PyQt6
-- pandas
-- numpy
-- matplotlib
-- seaborn
+## 数据文件格式（data/history.csv）
 
-## 安装
+- **表头**：`date,n1,n2,n3,n4,n5,n6,special_number`
+- **date** 字段支持“期号”（如2025001）或“日期”（如2023-01-01）
+- **n1-n6**：6个正码，1-49且唯一
+- **special_number**：特别号，1-49且不与正码重复
 
-1. 克隆仓库:
-```bash 
-git clone https://github.com/YOUR_USERNAME/lottery.git
-cd lottery
+示例：
+```
+date,n1,n2,n3,n4,n5,n6,special_number
+2025001,5,12,23,34,40,45,7
 ```
 
-2. 安装依赖:
-```bash
-pip install -r requirements.txt
-```
+---
 
-3. 数据目录：应用程序会自动在项目根目录创建 `data/` 目录（如果尚不存在），历史数据将存储在此目录下。
+## 安装与运行
+
+1. **环境要求**：Python 3.7+，PyQt6，pandas，numpy，matplotlib，seaborn
+2. **安装依赖**：
+   ```bash
+   pip install -r requirements.txt
+   ```
+3. **启动GUI**：
+   ```bash
+   python -m lottery_analyzer.main --gui
+   ```
+   - 启动后会自动从API同步最新数据
+4. **命令行用法**：
+   ```bash
+   python -m lottery_analyzer.main <命令> [参数]
+   ```
+   - 具体命令见 `python -m lottery_analyzer.main -h`
+
+---
+
+## 其他说明
+
+- **自定义标签**：当前仅内存保存，重启后会丢失。
+- **数据目录**：首次运行自动创建 `data/` 目录。
+- **可视化结果**：保存在 `data/analysis_plots/` 目录。
+
+---
+
+## 未来规划
+
+- 持久化自定义标签
+- 更多高级预测模型
+- 多种彩票格式支持
+- Web界面
+
+---
+
+如需英文文档或详细开发接口说明，请联系维护者。
