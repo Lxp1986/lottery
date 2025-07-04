@@ -16,20 +16,52 @@ os.makedirs(BACKUP_DIR, exist_ok=True)
 # 修改CSV文件头
 CSV_HEADER = ['date', 'n1', 'n2', 'n3', 'n4', 'n5', 'n6', 'special_number']
 
-def save_history(draw_data: List[Dict], custom_path: str = None) -> None:
-    """保存历史数据，总是保存到系统目录，可选保存到自定义位置
+def _validate_draw_data(draw: dict, previous_draws: list) -> bool:
+    """验证开奖数据的有效性，包括重复性检查
     
     Args:
-        draw_data: 要保存的数据
-        custom_path: 自定义保存路径，如果为None则不保存到自定义路径
+        draw: 当前开奖记录
+        previous_draws: 之前的开奖记录列表
+    
+    Returns:
+        bool: 数据是否有效
     """
-    try:
-        # 1. 保存到系统文件
-        _save_to_file(draw_data, SYSTEM_FILE)
+    if not draw or 'date' not in draw or 'numbers' not in draw or 'special' not in draw:
+        print(f"警告: 数据格式不完整: {draw}")
+        return False
         
-        # 2. 如果指定了自定义路径，也保存一份
+    # 检查与最近10期的重复性
+    recent_draws = previous_draws[-10:] if previous_draws else []
+    for prev_draw in recent_draws:
+        if (draw['numbers'] == prev_draw['numbers'] and 
+            draw['special'] == prev_draw['special'] and
+            draw['date'] != prev_draw['date']):
+            print(f"警告: 检测到重复数据 - 期号:{draw['date']}, 与期号:{prev_draw['date']}重复")
+            return False
+            
+    return True
+
+def save_history(draw_data: List[Dict], custom_path: str = None) -> None:
+    """保存历史数据，带重复性检查和期号去重"""
+    try:
+        # 验证每条数据
+        validated_data = []
+        seen_dates = set()
+        for i, draw in enumerate(draw_data):
+            date = draw.get('date')
+            if date in seen_dates:
+                continue  # 跳过重复期号
+            if _validate_draw_data(draw, validated_data):
+                validated_data.append(draw)
+                seen_dates.add(date)
+            else:
+                print(f"跳过无效数据: {draw}")
+        
+        # 保存验证后的数据
+        _save_to_file(validated_data, SYSTEM_FILE)
+        
         if custom_path and custom_path != SYSTEM_FILE:
-            _save_to_file(draw_data, custom_path)
+            _save_to_file(validated_data, custom_path)
             
     except Exception as e:
         raise IOError(f"保存失败: {str(e)}")
